@@ -1,208 +1,234 @@
-
 # iMotifPredictor
 
-## Overview
+Official repository for the paper:
 
-iMotifPredictor is a convolutional neural network (CNN) designed to predict i-motif (iM) structures in DNA by integrating multiple data sources. iMs are non-canonical structures that form in single-stranded DNA and have been linked to various cellular functions and diseases. This project includes trained models for predicting iM structures using different data sources.
+**iMotifPredictor: i-motif prediction by multi-data integration**
 
-## Contents
-- **AUROC**
-Files used for calculating the AUROC (Area Under the Receiver Operating Characteristic curve) for each model with each type of negative dataset.
+Accepted as a full paper at ACM BCB 2026.
 
-- **atac_files**
-A zipped folder containing bedGraph files used to calculate ATAC signals and the corresponding signal files. Includes a Python script for calculating the ATAC signals.
+`iMotifPredictor` is a deep-learning framework for genome-wide i-motif prediction by integrating:
+- DNA sequence (124-nt windows)
+- sequence-derived iM-IP score
+- epigenetic scalar features
 
-- **fasta_files**
-FASTA formatted sequences used in the analysis.
+The repository includes inference/training scripts, pretrained models, and interpretability utilities.
 
- - **genNullSeq**
-Text files of the negative sequences generated using the GenNullSeq package.
-Credit to the package:
-```plaintext
-https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4937197/
+## Model Overview
+
+### iM-IP (sequence-only)
+- Architecture: hybrid `CNN -> CNN -> LSTM -> Dense -> Sigmoid`
+- Input: one-hot encoded DNA sequence (`124 x 4`)
+- Output: scalar iM propensity score
+- Pretrained models: `models/iM-IP/*.h5` (HEK, U2OS, MCF7)
+
+### iMotifPredictor (LSTM fusion)
+- Architecture: `LSTM -> Dropout -> (Late Fusion with scalar features) -> Dense -> Sigmoid`
+- Input: DNA sequence (`124 x 4`) plus optional scalar features
+- Output: probability score for i-motif formation
+- Pretrained variants: `models/iMotifPredictor/*.h5`
+
+#### iMotifPredictor Variants and Required Columns
+- `seq_only`: `Sequence`
+- `seq_plus_imip`: `Sequence`, `pred_hybrid_cnn_lstm_mean`
+- `seq_plus_epi6`: `Sequence`, `H3K9me3`, `atac_signals`, `H3K4me1`, `H3K27ac`, `H3K36me3`, `H3K4me3`
+- `seq_plus_epi6_plus_imip`: `Sequence` + all `seq_plus_epi6` columns + `pred_hybrid_cnn_lstm_mean`
+- `seq_plus_epi2_wdlps`: `Sequence`, `H3K9me3`, `atac_signals`
+- `seq_plus_epi2_wdlps_plus_imip`: `Sequence`, `H3K9me3`, `atac_signals`, `pred_hybrid_cnn_lstm_mean`
+
+## Repository Layout
+
+- `src/imotifpredictor/`: Python package
+- `scripts/`: CLI entrypoints for training, inference, evaluation, and preprocessing
+- `models/`: pretrained `.h5` models
+- `data/example/`: minimal input example
+
+## Clone
+
+```bash
+git clone https://github.com/OrensteinLab/iMotifPredictor.git
+cd iMotifPredictor
 ```
 
-- **im_seeker**
-Results of running iM-Seeker and creating files for easier AUROC calculation.
-Credit to:
-```plaintext
-https://academic.oup.com/nar/article/52/W1/W19/7659304
+## Installation
+
+Create and activate a clean Python environment first.
+
+### Option A: `venv`
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
 ```
 
+### Option B: Conda
 
-- **interpation_file**
-A zipped file containing sequences created for model interpretation.
-
-- **microarray_files**
-Processed microarray data table used for training along with signal files for different sequences.
-Credit:
-```plaintext
-https://academic.oup.com/nar/article/51/22/12020/7420102#429540511
+```bash
+conda create -n imotif python=3.9 -y
+conda activate imotif
+pip install -r requirements.txt
+pip install -e .
 ```
 
-- **pos_txt_files**
-Processed positive sequences.
-Credit:
-```plaintext
-https://academic.oup.com/nar/article/51/16/8309/7232843
+## Verified Quick Start (Example Data)
+
+The following commands were validated on `data/example/example_windows.csv`.
+
+```bash
+python scripts/predict_imotifpredictor.py \
+  --input data/example/example_windows.csv \
+  --out outputs/example_seq_only_predictions.csv \
+  --variant seq_only \
+  --format csv \
+  --seq_col Sequence \
+  --batch_size 32
 ```
 
-- **random_neg**
-Text files of randomly selected negative sequences.
+Sanity check:
 
-- **txt_permutaion**
-Text files of dishuffled negative sequences.
-
-- **models**:
-  - **atac_model_gen.h5**
-  - **atac_model_rand.h5**
-  - **atacandmicro_model_gen.h5**
-  - **atacandmicro_model_rand.h5**
-  - **iMPropensity.h5**
-  - **micro_model_gen.h5**
-  - **micro_model_perm.h5**
-  - **micro_model_rand.h5**
-  - **sequence_model_gen.h5**
-  - **sequence_model_perm.h5**
-  - **sequence_model_rand.h5**
-
-## Requirements
-
-- Python 3.x
-- TensorFlow
-- NumPy
-- Pandas
-
-## Usage
-
-The provided models can be used to predict iM structures based on different types of input data. Below are the instructions on how to use these models. Note that the provided code example is a suggested way to use the models, but you can also load sequences (in the appropriate format) and use the `predict` function to make predictions and save results as you prefer.
-
-### Example Usage
-
-Here is an example of how to load a model and make predictions using the provided models:
-
-```python
+```bash
+python - <<'PY'
 import pandas as pd
-import numpy as np
-import tensorflow as tf
-from tensorflow.keras.models import load_model
-
-# Define the function to load the model and make predictions
-def predict_and_save(chunk_file, model_path, model_type):
-    # Load the chunk data
-    data = pd.read_csv(chunk_file)
-    
-    # Preprocess the sequences (placeholder, adjust as necessary)
-    def encode_sequence(sequence):
-        mapping = {'A': [1, 0, 0, 0], 'C': [0, 1, 0, 0], 'G': [0, 0, 1, 0], 'T': [0, 0, 0, 1], 'N': [0, 0, 0, 0]}
-        return np.array([mapping.get(base, [0, 0, 0, 0]) for base in sequence], dtype=np.int8)
-
-    sequences = np.array([encode_sequence(seq) for seq in data['Sequence']])
-    signal = np.array(data['signal']).reshape(-1, 1)
-    atac_signal = np.array(data['atac_signal']).reshape(-1, 1)
-
-    # Load the model
-    model = load_model(model_path)
-
-    # Make predictions based on the model type
-    if model_type == 'sequence_model':
-        predictions = model.predict(sequences, batch_size=128)
-    elif model_type == 'micro_model':
-        predictions = model.predict([sequences, signal], batch_size=128)
-    elif model_type == 'atac_model':
-        predictions = model.predict([sequences, atac_signal], batch_size=128)
-    elif model_type == 'atacandmicro_model':
-        predictions = model.predict([sequences, atac_signal, signal], batch_size=128)
-    else:
-        raise ValueError("Invalid model type")
-
-    # Add the predictions to the dataframe
-    prediction_column_name = model_path.split('/')[-1].replace('.h5', '')
-    data[prediction_column_name] = predictions
-
-    # Save the dataframe to the same file
-    data.to_csv(chunk_file, index=False)
-
-# Example usage
-predict_and_save('input_chunk.csv', 'sequence_model_gen.h5', 'sequence_model')
+df = pd.read_csv("outputs/example_seq_only_predictions.csv")
+print(df.shape)
+print(df[["Label_nuc", "pred_iMotifPredictor"]].head())
+PY
 ```
 
-### Input Format
+## Quick Inference
 
-- **DNA Sequences**: CSV file containing a column named `Sequence` with DNA sequences of the required length (either 60 or 124, depending on the model).
-- **Microarray Signal**: Column named `signal` containing iM propensity scores predicted by the microarray model.
-- **ATAC Signal**: Column named `atac_signal` containing open-chromatin signals.
+### 1) Predict iM-IP score from sequence
 
-### How to Use the Models
-
-1. **Prepare Input Data**: Ensure your input data is in a CSV format with the necessary columns (`Sequence`, `signal`, and/or `atac_signal`).
-
-2. **Load Model**: Use TensorFlow's `load_model` function to load the required model.
-
-3. **Make Predictions**: Pass the input data to the model and obtain predictions.
-
-4. **Save Predictions**: Add the predictions to your input data and save the results.
-
-### Models Description
-
-All models, except for iMPropensity, were trained on HEK293T data and predict the probability of iM formation:
-
-- **sequence_model_gen.h5**: Model trained on GenNullSeq data , using sequences of length 124 encoded in one-hot format.
-- **sequence_model_perm.h5**: Model trained on dishuffled data, using sequences of length 124 encoded in one-hot format.
-- **sequence_model_rand.h5**: Model trained on randomly selected genomic sequences, using sequences of length 124 encoded in one-hot format.
-- **micro_model_gen.h5**: Model trained on GenNullSeq data and iMpropensity signals, requires sequences of length 124 encoded in one-hot format and microarray signals.
-- **micro_model_perm.h5**: Model trained on dishuffled data and iMpropensity signals, requires sequences of length 124 encoded in one-hot format and microarray signals.
-- **micro_model_rand.h5**: Model trained on randomly selected data and iMpropensity signals, requires sequences of length 124 encoded in one-hot format and microarray signals.
-- **atac_model_gen.h5**: Model trained on GenNullSeq genomic sequences and ATAC-seq data, requires sequences of length 124 encoded in one-hot format and ATAC signals.
-- **atac_model_rand.h5**: Model trained on randomly selected sequences and ATAC-seq data, requires sequences of length 124 encoded in one-hot format and ATAC signals.
-- **atacandmicro_model_gen.h5**: Model trained on GenNullSeq genomic sequences, iMpropensity data, and ATAC-seq data, requires sequences of length 124 encoded in one-hot format, microarray signals, and ATAC signals.
-- **atacandmicro_model_rand.h5**: Model trained on randomly selected genomic, iMpropensity data , and ATAC-seq data, requires sequences of length 124 encoded in one-hot format, microarray signals, and ATAC signals.
-- **iMPropensity.h5**: Model trained to predict iM propensity based on high-throughput microarray data, requires sequences of length 60 encoded in one-hot format.
-
-### Using iMPropensity Model
-
-The `iMPropensity.h5` model is used to predict the propensity of iM formation based on microarray data. This model receives a DNA sequence of length 60 encoded in one-hot format. Here's an example of how to use the `iMPropensity.h5` model:
-
-```python
-import numpy as np
-import tensorflow as tf
-from tensorflow.keras.models import load_model
-
-# Define a function to encode sequences
-def encode_sequence(sequence):
-    mapping = {'A': [1, 0, 0, 0], 'C': [0, 1, 0, 0], 'G': [0, 0, 1, 0], 'T': [0, 0, 0, 1], 'N': [0, 0, 0, 0]}
-    return np.array([mapping.get(base, [0, 0, 0, 0]) for base in sequence], dtype=np.int8)
-
-# Load the model
-model = load_model('iMPropensity.h5')
-
-# Example sequence
-sequence = 'ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT'
-encoded_sequence = np.array([encode_sequence(sequence)])
-
-# Make prediction
-prediction = model.predict(encoded_sequence)
-print(f'iM Propensity: {prediction[0][0]}')
-
-# Example of sliding window approach
-def sliding_window_prediction(sequence, model, window_size=60, stride=1):
-    encoded_windows = []
-    for i in range(0, len(sequence) - window_size + 1, stride):
-        window_seq = sequence[i:i+window_size]
-        encoded_windows.append(encode_sequence(window_seq))
-    encoded_windows = np.array(encoded_windows)
-    predictions = model.predict(encoded_windows)
-    return predictions
-
-# Sliding window prediction for a sequence of length 124
-sequence_124 = 'ACGT' * 31
-predictions = sliding_window_prediction(sequence_124, model)
-average_prediction = np.mean(predictions)
-print(f'Average iM Propensity: {average_prediction}')
+```bash
+python scripts/predict_imip_score.py \
+  --input data/example/example_windows.csv \
+  --out outputs/imip_predictions.csv \
+  --format csv \
+  --add_mean
 ```
 
-## Conclusion
+### 2) Predict iMotifPredictor score
 
-iMotifPredictor provides a powerful tool for predicting i-motif structures in DNA using a combination of sequence information, microarray data, and open-chromatin information. By leveraging convolutional neural networks, iMotifPredictor achieves high accuracy and provides valuable insights into iM formation mechanisms.
+```bash
+python scripts/predict_imotifpredictor.py \
+  --input data/example/example_windows.csv \
+  --out outputs/imotif_predictions.csv \
+  --variant seq_only \
+  --format csv
+```
 
+To list available variants:
 
+```bash
+python scripts/predict_imotifpredictor.py --help
+```
+
+### 3) End-to-end pipeline
+
+```bash
+python scripts/predict_pipeline.py \
+  --input data/example/example_windows.csv \
+  --out outputs/pipeline_predictions.csv \
+  --variant seq_plus_imip \
+  --add_imip
+```
+
+If you already have three iM-IP columns in the input table, compute the mean directly:
+
+```bash
+python scripts/predict_pipeline.py \
+  --input data/example/example_windows.csv \
+  --out outputs/pipeline_predictions.csv \
+  --variant seq_plus_imip \
+  --add_imip \
+  --imip_source_cols pred_a,pred_b,pred_c
+```
+
+## Training
+
+### Train sequence-only iM-IP model
+
+```bash
+python scripts/train_imip_seqonly.py \
+  --input_csv /path/to/train.csv \
+  --output_dir outputs/train_imip \
+  --epochs 1 \
+  --batch_size 512
+```
+
+### Train iMotifPredictor on chunked CSV files
+
+```bash
+python scripts/train_imotifpredictor.py \
+  --directory /path/to/chunks \
+  --output_dir outputs/train_imotif \
+  --start chunk_aa.csv \
+  --end chunk_zz.csv \
+  --feature_variant all \
+  --balancing baseline
+```
+
+## Evaluation
+
+```bash
+python scripts/evaluate_run.py \
+  --csv outputs/pipeline_predictions.csv \
+  --label Label_nuc \
+  --out outputs/aupr_ranked.csv
+```
+
+## Preprocessing for Large FASTA Windows
+
+To split a large FASTA windows file into chunked CSV files:
+
+```bash
+python scripts/make_hg19_chunks.py \
+  --fasta_file /path/to/windows.fa \
+  --out_dir /path/to/chunks \
+  --rows_per_file 100000 \
+  --seq_len 124
+```
+
+This creates files like `chunk_aa.csv`, `chunk_ab.csv`, ...
+
+To add an epigenetic feature from a bigWig track:
+
+```bash
+python scripts/add_bigwig_feature.py \
+  --input_dir /path/to/chunks \
+  --glob "chunk_*.csv" \
+  --bigwig /path/to/H3K9me3.bw \
+  --feature_col H3K9me3 \
+  --in_place
+```
+
+If chromosome names differ between CSV and bigWig, use built-in mapping:
+
+```bash
+python scripts/add_bigwig_feature.py \
+  --input_dir /path/to/chunks \
+  --bigwig /path/to/track.bw \
+  --feature_col H3K9me3 \
+  --chrom_map hg38_to_ncbi \
+  --in_place
+```
+
+## Large Data Policy 
+
+This repository does **not** include full raw/derived genome-scale datasets (e.g., thousands of chunk files).
+
+For reproducibility, provide externally hosted data plus:
+- generation scripts (included here)
+- file manifest
+- checksums
+
+Manifest helper:
+
+```bash
+python scripts/build_data_manifest.py \
+  --root /path/to/chunks \
+  --include "*.csv" \
+  --out_tsv data/manifest.tsv \
+  --out_checksums data/checksums.sha256
+```

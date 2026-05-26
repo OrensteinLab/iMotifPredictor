@@ -1,0 +1,10 @@
+numpy>=1.23
+pandas>=1.5
+scikit-learn>=1.2
+tensorflow>=2.12
+pyyaml>=6.0
+matplotlib>=3.7
+logomaker>=0.8
+openpyxl>=3.1
+pyBigWig>=0.3.22
+pybedtools>=0.10

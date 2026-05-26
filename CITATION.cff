@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as described below."
+title: "iMotifPredictor"
+type: software
+version: "0.1.0"
+date-released: "2026-02-25"
+cff-version: 1.2.0
+message: "If you use this software, please cite it as described below."
+title: "iMotifPredictor: i-motif prediction by multi-data integration"
+type: software
+version: "1.0.0"
+date-released: "2026-05-30"
+authors:
+  - family-names: "Shrem"
+    given-names: "Danielle Hodaya"
+    orcid: "https://orcid.org/0009-0003-0698-9331"
+  - family-names: "Orenstein"
+    given-names: "Yaron"
+    orcid: "https://orcid.org/0000-0002-3583-3112"
+repository-code: "https://github.com/OrensteinLab/iMotifPredictor"
+license: "MIT"
